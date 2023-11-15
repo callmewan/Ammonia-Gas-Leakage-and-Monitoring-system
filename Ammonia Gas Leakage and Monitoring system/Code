@@ -1,0 +1,319 @@
+// Set the serial output for Blynk
+#define BLYNK_PRINT Serial
+
+// Use Serial2 for GPS module
+#define ss Serial2
+
+#include <WiFi.h>
+#include "Wire.h"
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+#include <TinyGPS++.h>
+#include <TinyGPS.h>
+
+// Define the GPS baud rate
+static const uint32_t GPSBaud = 9600;
+
+// Create Blynk timer
+BlynkTimer timer;
+
+// Create Blynk LEDs
+WidgetLED led1(V4);
+WidgetLED led2(V5);
+WidgetLED led3(V6);
+WidgetLED led4(V7);
+
+// Blynk and WiFi settings
+String apiKey = "SSTMYCFZVKS9I9XN";
+char auth[] = "xSSHLijfsavmVmMGmlFZOwEMALKy7A-S";
+char ssid[] = "wan";
+char pass[] = "123456789";
+const char* server = "api.thingspeak.com";
+
+// Blynk Map widget
+WidgetMap myMap(V0);
+WiFiClient client;
+TinyGPSPlus gps;
+
+// Define pin numbers for various components
+#define mq135 34
+#define mq135V2 35
+#define ALARM 2
+#define PUMP 4
+#define VALVE 15
+#define GREEN1 19
+#define GREEN2 22
+#define RED1 21
+#define RED2 23
+#define FAN1 5
+#define FAN2 18
+
+// Variables for sensor data
+float dataa = 0;
+float dataaa = 0;
+float Test = 0;
+float Test2 = 0;
+float spd;
+float sats;
+String bearing;
+unsigned int move_index = 1;
+
+// Function to handle data from MQ135 sensor
+void sensorData() {
+  // Read data from MQ135 sensor
+  dataa = analogRead(mq135);
+  // Update Blynk virtual pin V2 with Test value
+  Blynk.virtualWrite(V2, Test);
+  // Calculate Test value based on sensor data
+  Test = (dataa - 360);
+
+  if (Test > 600) {
+    // Turn off led1 and turn on led2
+    led1.off();
+    led2.on();
+    // Control various components based on sensor data
+    digitalWrite(GREEN1, LOW);
+    digitalWrite(RED1, HIGH);
+    digitalWrite(VALVE, LOW);
+    digitalWrite(PUMP, HIGH);
+    digitalWrite(FAN1, HIGH);
+    digitalWrite(ALARM, HIGH);
+    // Delay for notification
+    delay(1000);
+    // Send notification to Blynk app
+    Blynk.notify("Leakage Detected");
+  } else {
+    // Turn on led1 and turn off led2
+    led1.on();
+    led2.off();
+    // Control various components based on sensor data
+    digitalWrite(GREEN1, HIGH);
+    digitalWrite(RED1, LOW);
+    digitalWrite(VALVE, HIGH);
+    digitalWrite(PUMP, LOW);
+    digitalWrite(FAN1, LOW);
+    digitalWrite(ALARM, LOW);
+  }
+}
+
+// Function to handle data from MQ135V2 sensor
+void sensorDataV2() {
+  // Read data from MQ135V2 sensor
+  dataaa = analogRead(mq135V2);
+  // Update Blynk virtual pin V3 with Test2 value
+  Blynk.virtualWrite(V3, Test2);
+  // Calculate Test2 value based on sensor data
+  Test2 = (dataaa - 290);
+
+  if (Test2 > 600) {
+    // Turn off led3 and turn on led4
+    led3.off();
+    led4.on();
+    // Control various components based on sensor data
+    digitalWrite(GREEN2, LOW);
+    digitalWrite(RED2, HIGH);
+    digitalWrite(VALVE, LOW);
+    digitalWrite(PUMP, HIGH);
+    digitalWrite(FAN2, HIGH);
+    digitalWrite(ALARM, HIGH);
+    // Delay for notification
+    delay(1000);
+    // Send notification to Blynk app
+    Blynk.notify("Leakage Detected");
+  } else {
+    // Turn on led3 and turn off led4
+    led3.on();
+    led4.off();
+    // Control various components based on sensor data
+    digitalWrite(GREEN2, HIGH);
+    digitalWrite(RED2, LOW);
+    digitalWrite(VALVE, HIGH);
+    digitalWrite(PUMP, LOW);
+    digitalWrite(FAN2, LOW);
+    digitalWrite(ALARM, LOW);
+  }
+}
+
+void setup() {
+  // Start the serial communication
+  Serial.begin(9600);
+
+  // Start communication with the GPS module
+  ss.begin(GPSBaud);
+
+  // Initialize Blynk and set up pin modes
+  Blynk.begin(auth, ssid, pass, "188.166.206.43");
+  pinMode(ALARM, OUTPUT);
+  pinMode(mq135, INPUT);
+  pinMode(mq135V2, INPUT);
+  pinMode(GREEN1, OUTPUT);
+  pinMode(GREEN2, OUTPUT);
+  pinMode(RED1, OUTPUT);
+  pinMode(RED2, OUTPUT);
+  pinMode(ALARM, OUTPUT);
+  pinMode(PUMP, OUTPUT);
+  pinMode(FAN1, OUTPUT);
+  pinMode(FAN2, OUTPUT);
+  pinMode(VALVE, OUTPUT);
+
+  // Set up Blynk timer intervals
+  timer.setInterval(1000L, sensorData);
+  timer.setInterval(1000L, sensorDataV2);
+  timer.setInterval(1000L, sendUptime);
+
+  //Initial delay
+  delay(10);
+  // Print connecting message
+  Serial.println("Connecting to ");
+  Serial.println(ssid);
+  // Connect to WiFi
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+}
+
+void sendUptime() {
+  // Function to send sensor data to Thingspeak
+  int sensorValue1 = analogRead(36);
+  float voltage = (sensorValue1 * 1.0) / 1024.0;
+
+  float pressure_pascal = (3.0 * ((float)voltage - 0.47)) * 1000000.0;
+  float pressure_bar = pressure_pascal / 10e5;
+
+  // Print and send pressure level for tank 1 to Blynk
+  Serial.print("Pressure Level Tank 1: ");
+  Serial.println(pressure_bar);
+  Blynk.virtualWrite(V20, pressure_bar);
+  delay(100);
+
+  int sensorValue2 = analogRead(39);
+
+  float voltage1 = (sensorValue2 * 1.0) / 1024.0;
+
+  float pressure_pascal1 = (3.0 * ((float)voltage1 - 0.47)) * 1000000.0;
+  float pressure_bar1 = pressure_pascal1 / 10e5;
+
+  // Print and send pressure level for tank 2 to Blynk
+  Serial.print("Pressure Level Tank 2: ");
+  Serial.println(pressure_bar1);
+  Blynk.virtualWrite(V21, pressure_bar1);
+  delay(100);
+}
+
+void loop() {
+  // GPS data handling
+  while (ss.available() > 0) {
+    if (gps.encode(ss.read()))
+      displayInfo();
+
+    if (millis() > 5000 && gps.charsProcessed() < 10) {
+      Serial.println(F("No GPS detected: check wiring."));
+      while (true);
+    }
+  }
+  Blynk.run();
+  timer.run();
+
+  // Read sensor data
+  float dataa = analogRead(mq135);
+  float Test = (dataa - 360);
+
+  float dataaa = analogRead(mq135V2);
+  float Test2 = (dataaa - 290);
+
+  int sensorValue1 = analogRead(36);
+  float voltage = (sensorValue1 * 1.0) / 1024.0;
+  float pressure_pascal = (3.0 * ((float)voltage - 0.47)) * 1000000.0;
+  float pressure_bar = pressure_pascal / 10e5;
+
+  int sensorValue2 = analogRead(39);
+  float voltage1 = (sensorValue2 * 1.0) / 1024.0;
+  float pressure_pascal1 = (3.0 * ((float)voltage1 - 0.47)) * 1000000.0;
+  float pressure_bar1 = pressure_pascal1 / 10e5;
+
+  // Check for NaN values in sensor data
+  if (isnan(mq135) || isnan(mq135V2) || isnan(pressure_bar) || isnan(pressure_bar1)) {
+    Serial.println("Failed to read from MQ-135 and pressure sensor");
+    return;
+  }
+
+  // Connect to Thingspeak and send sensor data
+  if (client.connect(server, 80)) {
+    // Prepare the POST request for Thingspeak
+    String postStr = apiKey;
+    postStr += "&field1=";
+    postStr += String(Test);
+    postStr += "&field2=";
+    postStr += String(Test2);
+    postStr += "&field3=";
+    postStr += String(pressure_bar);
+    postStr += "&field4=";
+    postStr += String(pressure_bar1);
+    postStr += "\r\n\r\n\r\n\r\n";
+
+    // Send the POST request to Thingspeak
+    client.print("POST /update HTTP/1.1\n");
+    client.print("Host: api.thingspeak.com\n");
+    client.print("Connection: close\n");
+    client.print("X-THINGSPEAKAPIKEY: " + apiKey + "\n");
+    client.print("Content-Type: application/x-www-form-urlencoded\n");
+    client.print("Content-Length: ");
+    client.print(postStr.length());
+    client.print("\n\n");
+    client.print(postStr);
+
+    // Print sensor data to serial monitor
+    Serial.print("Gas Level: ");
+    Serial.println(Test);
+    Serial.print("Gas Level 2: ");
+    Serial.println(Test2);
+
+    Serial.println("Data Send to Thingspeak");
+  }
+
+  // Delay before stopping the client
+  delay(500);
+  client.stop();
+  Serial.println("Waiting...");
+
+  // Additional delay
+  delay(1500);
+}
+
+void displayInfo() {
+  // Display GPS information
+  Serial.print(F("Location: "));
+  if (gps.location.isValid()) {
+    // Get latitude and longitude from GPS
+    float latitude = (gps.location.lat());
+    float longitude = (gps.location.lng());
+
+    // Print and send GPS coordinates to Blynk
+    Serial.print(gps.location.lat(), 6);
+    Serial.print(F(","));
+    Serial.print(gps.location.lng(), 6);
+    Blynk.virtualWrite(V10, String(latitude, 6));
+    Blynk.virtualWrite(V11, String(longitude, 6));
+    myMap.location(move_index, latitude, longitude, "GPS_Location");
+
+    // Get and send speed from GPS to Blynk
+    spd = gps.speed.kmph();
+    Blynk.virtualWrite(V13, spd);
+
+    // Get and send number of satellites from GPS to Blynk
+    sats = gps.satellites.value();
+    Blynk.virtualWrite(V12, sats);
+
+    // Get and send cardinal direction from GPS to Blynk
+    bearing = TinyGPSPlus::cardinal(gps.course.value());
+    Blynk.virtualWrite(V14, bearing);
+  } else {
+    Serial.print(F("INVALID"));
+  }
+
+  Serial.println();
+}
